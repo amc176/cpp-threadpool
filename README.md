@@ -26,6 +26,23 @@ Note that callables are binded with their arguments using `std::bind`, so to pas
 
 In the file [main.cpp](Threadpool/main.cpp) you can find some examples.
 
+## Handling task result
+Users can handle task state and result through handlers returned by `Threapool::queueAndHandleTask`:
+```C++
+auto handler = threadpool.queueAndHandleTask(&getMeaningOfLife);
+
+std::this_thread::sleep_for(std::chrono::seconds(3));
+// Is the task completed?
+if (handler.finished()) {
+  std::cout << "The meaning of life is " << handler.getResult() << "\n";
+}
+else {
+  // If the result is not ready, block this thread until it is
+  int meaningOfLife = handler.getResult();
+}
+```
+**Important:** `TaskHandler::getResult` must be called **only once**. Not doing so might throw or cause UB.
+
 ## Task ordering
 Tasks are ordered following the methods FIFO or LIFO.
 Users can specify the default task ordering via the Threadpool constructor:
@@ -44,11 +61,8 @@ class Threadpool {
 Threadpool threadpool{ 5, Threadpool::LIFO };
 ```
 
-As there can be tasks more important than others, a template argument with the **task priority** can be specified:
+As there can be tasks more important than others, a template argument with the **task priority** can be specified to `Threadpool::queueTask`and `Threadpool::queueAndHandleTask`:
 ```C++
-  class Threadpool {
-  public:
-    // Priority with which a task will be queued
     enum TaskPriority { 
       MAX,      // The task will be the next one to execute
       DEFAULT,  // FIFO or LIFO
@@ -58,28 +72,8 @@ As there can be tasks more important than others, a template argument with the *
   
 threadpool.queueTask(&normalTask); // Default ordering
 threadpool.queueTask<Threadpool::MIN>(&notImportantTask);
-threadpool.queueTask<Threadpool::MAX>(&veryImportantTask);
+threadpool.queueAndHandleTask<Threadpool::MAX>(&veryImportantTask);
 ```
-
-## Handling task result
-Users can handle task state and result through handlers returned by `Threapool::queueAndHandleTask`:
-```C++
-auto handler = threadpool.queueAndHandleTask<Threadpool::MAX>(
-  &getMeaningOfLife
-);
-
-std::this_thread::sleep_for(std::chrono::seconds(3));
-// Is the task completed?
-if (handler.finished()) {
-  std::cout << "The meaning of life is " << handler.getResult() << "\n";
-}
-else {
-  // If the result is not ready, block this thread until it is
-  int meaningOfLife = handler.getResult();
-}
-```
-**Important:** `TaskHandler::getResult` must be called **only once**. Not doing so might throw or cause UB.
-
 ## Thread management
 The threadpool can be easily resized in runtime by calling `Threadpool::resize(unsigned int newThreadAmount)`
 ```C++
@@ -104,7 +98,7 @@ int main() {
 
 ## Exception safety
 Threadpool constructor and its member `resize` offer *basic exception guarantee*.
-If they throw (probably because the system can't allocate new threads) the threadpool will be in a valid state, holding as many threads as it had prior to the expcetion throw.
+If they throw (probably because the system can't allocate new threads) the threadpool will be in a valid state, holding as many threads as it had prior to the exception throw.
 
 If an *unhandled* task throws, `std::terminate` is called.
 
